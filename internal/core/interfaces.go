@@ -13,6 +13,7 @@ type Crawler interface {
 // Fetcher is responsible for making the actual HTTP requests.
 // Implementation: Initially standard net/http, later with Rotated Proxies.
 type Fetcher interface {
+	// Fetch takes the absolute url and returns the body when status = 200
 	Fetch(ctx context.Context, url string) (io.ReadCloser, error)
 }
 

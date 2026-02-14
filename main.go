@@ -2,15 +2,24 @@ package main
 
 import (
 	"WebCrawler/internal/crawler"
+	"WebCrawler/internal/fetcher"
 	"context"
+	"log"
+	"os"
+	"os/signal"
 	"time"
 )
 
 func main() {
-	c := crawler.Crawler{}
-	err := c.Start(context.TODO())
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	f := fetcher.NewFetcher(10*time.Second, "ShiryuBot/1.0")
+
+	c := crawler.NewCrawler(f)
+	err := c.Start(ctx)
 	if err != nil {
-		return
+		log.Fatal(err)
 	}
-	time.Sleep(1 * time.Millisecond)
 }
