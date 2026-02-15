@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/rs/dnscache"
 )
 
 type Fetcher struct {
@@ -19,9 +22,23 @@ type Fetcher struct {
 	forbiddenPath map[string][]string
 }
 
+func DNSResolver() *dnscache.Resolver {
+	r := &dnscache.Resolver{}
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			fmt.Println("[DNS] Refreshing cache from upstream...")
+			r.Refresh(true)
+		}
+	}()
+	return r
+}
+
 // NewFetcher creates a new Fetcher with safe defaults for a crawler.
 // timeout: The hard limit for the entire request (DNS + Connect + Wait + Read)
 func NewFetcher(timeout time.Duration, userAgent string) *Fetcher {
+	r := DNSResolver()
 	return &Fetcher{
 		userAgent:     userAgent,
 		forbiddenPath: make(map[string][]string),
@@ -29,6 +46,26 @@ func NewFetcher(timeout time.Duration, userAgent string) *Fetcher {
 			Timeout: timeout,
 			// Connection Pooling
 			Transport: &http.Transport{
+				DisableKeepAlives: false,
+				DialContext: func(ctx context.Context, network string, addr string) (conn net.Conn, err error) {
+					host, port, err := net.SplitHostPort(addr)
+					if err != nil {
+						return nil, err
+					}
+					ips, err := r.LookupHost(ctx, host)
+					if err != nil {
+						return nil, err
+					}
+					fmt.Printf("[DIAL] Attempting connection to %s using IPs %v\n", host, ips)
+					for _, ip := range ips {
+						var dialer net.Dialer
+						conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
+						if err == nil {
+							return conn, nil
+						}
+					}
+					return nil, fmt.Errorf("dial failed")
+				},
 				MaxIdleConns:        100, // Keep 100 connections open in the pool
 				MaxIdleConnsPerHost: 10,  // Keep 10 open specifically for "wikipedia.org"
 				IdleConnTimeout:     90 * time.Second,
