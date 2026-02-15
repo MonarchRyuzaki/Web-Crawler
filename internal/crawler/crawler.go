@@ -1,16 +1,16 @@
 package crawler
 
 import (
-	"WebCrawler/internal/fetcher"
-	"WebCrawler/internal/parser"
+	"WebCrawler/internal/core"
 	"context"
 	"fmt"
 	"log"
 )
 
 type Crawler struct {
-	fetcher *fetcher.Fetcher
-	parser  *parser.MyParser
+	fetcher core.Fetcher
+	parser  core.Parser
+	store   core.Storage
 }
 
 func (c *Crawler) Start(ctx context.Context) error {
@@ -38,15 +38,23 @@ func (c *Crawler) Start(ctx context.Context) error {
 			}
 			_ = article
 			body.Close()
+			save, err := c.store.CheckAndSave(ctx, url, article.TextContent)
+			if err != nil {
+				return err
+			}
+			if save {
+				log.Printf("Saved Successfully to In Memory Store")
+			}
 		}
 		break
 	}
 	return nil
 }
 
-func NewCrawler(fetcher *fetcher.Fetcher, parser *parser.MyParser) *Crawler {
+func NewCrawler(fetcher core.Fetcher, parser core.Parser, store core.Storage) *Crawler {
 	return &Crawler{
 		fetcher: fetcher,
 		parser:  parser,
+		store:   store,
 	}
 }

@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"net/url"
@@ -27,17 +26,17 @@ func (m *MyParser) parseContent(content io.Reader, u string) (article readabilit
 		log.Fatalf("failed to parse %s: %v\n", u, err)
 	}
 
-	fmt.Printf("URL     : %s\n", u)
-	fmt.Printf("Title   : %s\n", article.Title)
-	fmt.Printf("Author  : %s\n", article.Byline)
-	fmt.Printf("Length  : %d\n", article.Length)
-	fmt.Printf("Excerpt : %s\n", article.Excerpt)
-	fmt.Printf("SiteName: %s\n", article.SiteName)
-	fmt.Printf("Image   : %s\n", article.Image)
-	fmt.Printf("Favicon : %s\n", article.Favicon)
-	fmt.Printf("Content : %s\n", article.TextContent)
-	fmt.Printf("HTMLContent: %s\n", article.Content)
-	fmt.Println()
+	//fmt.Printf("URL     : %s\n", u)
+	//fmt.Printf("Title   : %s\n", article.Title)
+	//fmt.Printf("Author  : %s\n", article.Byline)
+	//fmt.Printf("Length  : %d\n", article.Length)
+	//fmt.Printf("Excerpt : %s\n", article.Excerpt)
+	//fmt.Printf("SiteName: %s\n", article.SiteName)
+	//fmt.Printf("Image   : %s\n", article.Image)
+	//fmt.Printf("Favicon : %s\n", article.Favicon)
+	//fmt.Printf("Content : %s\n", article.TextContent)
+	//fmt.Printf("HTMLContent: %s\n", article.Content)
+	//fmt.Println()
 	return article, err
 }
 

@@ -29,8 +29,8 @@ type Storage interface {
 	// Visited checks if we have already crawled this URL (Bloom Filter check)
 	Visited(ctx context.Context, url string) (bool, error)
 
-	// Save stores the crawled content (DynamoDB)
-	Save(ctx context.Context, url string, content string) error
+	// CheckAndSave stores the crawled content and returns true if successfully saved and false if already present (DynamoDB)
+	CheckAndSave(ctx context.Context, url string, content string) (bool, error)
 
 	// MarkVisited explicitly adds a URL to the visited set (Bloom Filter add)
 	MarkVisited(ctx context.Context, url string) error

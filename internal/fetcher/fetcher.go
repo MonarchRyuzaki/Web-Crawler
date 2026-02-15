@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/dnscache"
@@ -20,6 +21,8 @@ type Fetcher struct {
 	userAgent string
 	// forbiddenPath stores domain as key and relative url as the values
 	forbiddenPath map[string][]string
+
+	mu sync.Mutex
 }
 
 func DNSResolver() *dnscache.Resolver {
@@ -130,6 +133,9 @@ func (f *Fetcher) handleRobots(ctx context.Context, domain string) error {
 		}
 	}
 
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.forbiddenPath[domain] = disallowed
 	log.Printf("Domain %v has the disallowed paths : %v\n", domain, disallowed)
 	return scanner.Err()
@@ -138,7 +144,10 @@ func (f *Fetcher) handleRobots(ctx context.Context, domain string) error {
 func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
 	domain, _ := util.GetDomain(url)
 
+	f.mu.Lock()
+
 	if _, ok := f.forbiddenPath[domain]; !ok {
+		f.mu.Unlock()
 		if err := f.handleRobots(ctx, domain); err != nil {
 			// Log error but perhaps continue if robots.txt is missing (404)
 			// For now, we follow your original logic of returning the error
@@ -150,8 +159,11 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) 
 	if err != nil {
 		return nil, fmt.Errorf("could not parse path: %w", err)
 	}
+	f.mu.Lock()
+	fp := f.forbiddenPath[domain]
+	f.mu.Unlock()
 
-	for _, forbidden := range f.forbiddenPath[domain] {
+	for _, forbidden := range fp {
 		// Standard robots.txt behavior: "Disallow: /tmp" matches "/tmp", "/tmp/", and "/tmp/file.html"
 		if strings.HasPrefix(currentPath, forbidden) {
 			return nil, fmt.Errorf("access denied by robots.txt: %s", url)
