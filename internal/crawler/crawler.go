@@ -2,7 +2,7 @@ package crawler
 
 import (
 	"WebCrawler/internal/core"
-	"WebCrawler/internal/extractor"
+	"WebCrawler/internal/extension"
 	"context"
 	"fmt"
 	"log"
@@ -46,10 +46,8 @@ func (c *Crawler) Start(ctx context.Context) error {
 			if save {
 				log.Printf("Saved Successfully to In Memory Store")
 			}
-			links := extractor.LinkExtractor(article.Content)
-			for _, link := range links {
-				fmt.Println("Found link:", link)
-			}
+			links := extension.UrlExtractor(article.Content)
+			extension.CheckSaveAddUrlToFrontier(ctx, c.store, links)
 		}
 		break
 	}

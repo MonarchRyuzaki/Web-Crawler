@@ -27,6 +27,8 @@ type Parser interface {
 // Implementation: Initially In-Memory Map, later DynamoDB + Bloom Filter.
 type Storage interface {
 	// Visited checks if we have already crawled this URL (Bloom Filter check)
+	// In actual bloom filter, if the filter says maybe ie yes, check the db too in this function
+	// The impl. for above comment is skipped for in Memory store
 	Visited(ctx context.Context, url string) (bool, error)
 
 	// CheckAndSave stores the crawled content and returns true if successfully saved and false if already present (DynamoDB)
