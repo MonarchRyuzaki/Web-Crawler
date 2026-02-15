@@ -2,7 +2,7 @@ package crawler
 
 import (
 	"WebCrawler/internal/fetcher"
-	"bufio"
+	"WebCrawler/internal/parser"
 	"context"
 	"fmt"
 	"log"
@@ -10,6 +10,7 @@ import (
 
 type Crawler struct {
 	fetcher *fetcher.Fetcher
+	parser  *parser.MyParser
 }
 
 func (c *Crawler) Start(ctx context.Context) error {
@@ -24,16 +25,18 @@ func (c *Crawler) Start(ctx context.Context) error {
 			fmt.Println("Shutting down gracefully...")
 			return ctx.Err()
 		default:
-			body, err := c.fetcher.Fetch(ctx, "https://en.wikipedia.org/wiki/Web_crawler")
+			baseUrl := "https://en.wikipedia.org"
+			path := "/wiki/Web_crawler"
+			url := baseUrl + path
+			body, err := c.fetcher.Fetch(ctx, url)
 			if err != nil {
 				return err
 			}
-			scanner := bufio.NewScanner(body)
-
-			for scanner.Scan() {
-				line := scanner.Text()
-				fmt.Println(line)
+			article, err := c.parser.Parse(body, url)
+			if err != nil {
+				return err
 			}
+			_ = article
 			body.Close()
 		}
 		break
@@ -41,8 +44,9 @@ func (c *Crawler) Start(ctx context.Context) error {
 	return nil
 }
 
-func NewCrawler(fetcher *fetcher.Fetcher) *Crawler {
+func NewCrawler(fetcher *fetcher.Fetcher, parser *parser.MyParser) *Crawler {
 	return &Crawler{
 		fetcher: fetcher,
+		parser:  parser,
 	}
 }

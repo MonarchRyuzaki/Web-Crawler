@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"io"
+
+	"github.com/go-shiori/go-readability"
 )
 
 // Crawler is the main engine that orchestrates the flow.
@@ -11,16 +13,14 @@ type Crawler interface {
 }
 
 // Fetcher is responsible for making the actual HTTP requests.
-// Implementation: Initially standard net/http, later with Rotated Proxies.
 type Fetcher interface {
 	// Fetch takes the absolute url and returns the body when status = 200
 	Fetch(ctx context.Context, url string) (io.ReadCloser, error)
 }
 
 // Parser handles the raw content processing.
-// Implementation: html.Parse to extract links and text.
 type Parser interface {
-	Parse(content io.Reader, baseUrl string) (links []string, text string, err error)
+	Parse(content io.Reader, url string) (article readability.Article, err error)
 }
 
 // Storage handles persistence of content and deduplication.
