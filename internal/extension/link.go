@@ -44,7 +44,7 @@ func UrlFilter(link string) bool {
 		return false
 	}
 
-	return u.Scheme == "https" || u.Scheme == "http"
+	return (u.Scheme == "https" || u.Scheme == "http") && len(u.String()) <= 300
 }
 
 func CheckSaveAddUrlToFrontier(ctx context.Context, frontier core.Frontier, store core.Storage, links []string) {
