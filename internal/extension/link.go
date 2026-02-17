@@ -47,7 +47,7 @@ func UrlFilter(link string) bool {
 	return u.Scheme == "https" || u.Scheme == "http"
 }
 
-func CheckSaveAddUrlToFrontier(ctx context.Context, store core.Storage, links []string) {
+func CheckSaveAddUrlToFrontier(ctx context.Context, frontier core.Frontier, store core.Storage, links []string) {
 	for _, link := range links {
 		isVisited, err := store.Visited(ctx, link)
 		if err != nil {
@@ -63,7 +63,12 @@ func CheckSaveAddUrlToFrontier(ctx context.Context, store core.Storage, links []
 			continue
 		}
 
-		// TODO: Addition to frontier later
+		go func() {
+			err = frontier.AddUrl(link)
+			if err != nil {
+				return
+			}
+		}()
 	}
 
 }

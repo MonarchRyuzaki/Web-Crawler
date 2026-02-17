@@ -25,6 +25,19 @@ type Fetcher struct {
 	mu sync.Mutex
 }
 
+func (f *Fetcher) getForbiddenPath(domain string) ([]string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	paths, ok := f.forbiddenPath[domain]
+	return paths, ok
+}
+
+func (f *Fetcher) setForbiddenPath(domain string, paths []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.forbiddenPath[domain] = paths
+}
+
 func DNSResolver() *dnscache.Resolver {
 	r := &dnscache.Resolver{}
 	go func() {
@@ -133,10 +146,7 @@ func (f *Fetcher) handleRobots(ctx context.Context, domain string) error {
 		}
 	}
 
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.forbiddenPath[domain] = disallowed
+	f.setForbiddenPath(domain, disallowed)
 	log.Printf("Domain %v has the disallowed paths : %v\n", domain, disallowed)
 	return scanner.Err()
 }
@@ -144,10 +154,7 @@ func (f *Fetcher) handleRobots(ctx context.Context, domain string) error {
 func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
 	domain, _ := util.GetDomain(url)
 
-	f.mu.Lock()
-
-	if _, ok := f.forbiddenPath[domain]; !ok {
-		f.mu.Unlock()
+	if _, ok := f.getForbiddenPath(domain); !ok {
 		if err := f.handleRobots(ctx, domain); err != nil {
 			// Log error but perhaps continue if robots.txt is missing (404)
 			// For now, we follow your original logic of returning the error
@@ -159,9 +166,8 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) 
 	if err != nil {
 		return nil, fmt.Errorf("could not parse path: %w", err)
 	}
-	f.mu.Lock()
-	fp := f.forbiddenPath[domain]
-	f.mu.Unlock()
+
+	fp, _ := f.getForbiddenPath(domain)
 
 	for _, forbidden := range fp {
 		// Standard robots.txt behavior: "Disallow: /tmp" matches "/tmp", "/tmp/", and "/tmp/file.html"

@@ -1,8 +1,8 @@
 package parser
 
 import (
+	"fmt"
 	"io"
-	"log"
 	"net/url"
 
 	"github.com/go-shiori/go-readability"
@@ -19,11 +19,11 @@ func NewParser() *MyParser {
 func (m *MyParser) parseContent(content io.Reader, u string) (article readability.Article, err error) {
 	parsedUrl, err := url.Parse(u)
 	if err != nil {
-		log.Fatalf("error parsing url")
+		return readability.Article{}, fmt.Errorf("error parsing url: %w", err)
 	}
 	article, err = readability.FromReader(content, parsedUrl)
 	if err != nil {
-		log.Fatalf("failed to parse %s: %v\n", u, err)
+		return readability.Article{}, fmt.Errorf("failed to parse content: %w", err)
 	}
 
 	//fmt.Printf("URL     : %s\n", u)
