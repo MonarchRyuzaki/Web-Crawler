@@ -154,7 +154,7 @@ func (b *BatchRanker) processBatch(requests []rankRequest) {
 				Error:  nil,
 			}
 
-			b.cache[res.Domain] = result
+			b.setRankResult(res.Domain, result)
 
 			ch <- result
 		}

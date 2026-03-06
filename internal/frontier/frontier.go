@@ -123,10 +123,11 @@ func (f *Frontier) frontQueueSelectorDequeue() {
 func (f *Frontier) backQueueRouter(url string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	idx, ok := f.backQueueRoutingTable[url]
+	domain, _ := util.GetDomain(url)
+	idx, ok := f.backQueueRoutingTable[domain]
 	if !ok {
 		idx = rand.IntN(NUMBER_OF_BACK_QUEUE)
-		f.backQueueRoutingTable[url] = idx
+		f.backQueueRoutingTable[domain] = idx
 	}
 
 	f.backQueue[idx].Enqueue(url)
@@ -147,5 +148,10 @@ func (f *Frontier) backQueueSelector() {
 }
 
 func (f *Frontier) NextUrl(ctx context.Context) (string, error) {
-	return <-f.tempNextUrl, nil
+	select {
+	case url := <-f.tempNextUrl:
+		return url, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
