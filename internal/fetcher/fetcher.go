@@ -162,6 +162,10 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, error) 
 		}
 	}
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	currentPath, err := util.GetPath(url)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse path: %w", err)

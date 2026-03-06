@@ -49,6 +49,9 @@ func UrlFilter(link string) bool {
 
 func CheckSaveAddUrlToFrontier(ctx context.Context, frontier core.Frontier, store core.Storage, links []string) {
 	for _, link := range links {
+		if ctx.Err() != nil {
+			return
+		}
 		isVisited, err := store.Visited(ctx, link)
 		if err != nil {
 			log.Printf("Could Not Check URL")
