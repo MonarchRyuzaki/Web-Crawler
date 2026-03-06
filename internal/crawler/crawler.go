@@ -5,7 +5,9 @@ import (
 	"WebCrawler/internal/extension"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"time"
 )
 
 type Crawler struct {
@@ -15,52 +17,61 @@ type Crawler struct {
 	store    core.Storage
 }
 
+type fetchResult struct {
+	url  string
+	body io.ReadCloser
+}
+
+const NUMBER_OF_FETCHER_WORKERS = 5
+const NUMBER_OF_PROCESSING_WORKERS = 5
+
 func (c *Crawler) Start(ctx context.Context) error {
-	//TODO implement me
-	// 1. Get Seed URLs
-	// 2. Put Seed URLs in Frontier
-	// 3. Spawn multiple workers which get a item from Frontier
 	log.Printf("Function Crawler.Start\n")
-	cnt := 1
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("Shutting down gracefully...")
-			return ctx.Err()
-		default:
-			url, err := c.frontier.NextUrl(ctx)
-			if err != nil {
-				fmt.Printf("%v", err)
-				continue
+	workStream := make(chan fetchResult, 50)
+	for i := 0; i < NUMBER_OF_FETCHER_WORKERS; i++ {
+		go func() {
+			for {
+				time.Sleep(10 * time.Millisecond)
+				url, err := c.frontier.NextUrl(ctx)
+				if err != nil {
+					fmt.Printf("%v", err)
+					continue
+				}
+				body, err := c.fetcher.Fetch(ctx, url)
+				if err != nil {
+					fmt.Printf("%v", err)
+					continue
+				}
+				workStream <- fetchResult{url: url, body: body}
 			}
-			body, err := c.fetcher.Fetch(ctx, url)
-			if err != nil {
-				fmt.Printf("%v", err)
-				continue
-			}
-			article, err := c.parser.Parse(body, url)
-			if err != nil {
-				fmt.Printf("%v", err)
-				continue
-			}
-			_ = article
-			body.Close()
-			save, err := c.store.CheckAndSave(ctx, url, article.TextContent)
-			if err != nil {
-				fmt.Printf("%v", err)
-				continue
-			}
-			if save {
-				log.Printf("Saved Successfully to In Memory Store")
-			}
-			links := extension.UrlExtractor(article.Content)
-			extension.CheckSaveAddUrlToFrontier(ctx, c.frontier, c.store, links)
-		}
-		if cnt >= 10 {
-			break
-		}
-		cnt++
+		}()
 	}
+	for i := 0; i < NUMBER_OF_PROCESSING_WORKERS; i++ {
+		go func() {
+			for res := range workStream {
+				article, err := c.parser.Parse(res.body, res.url)
+				if err != nil {
+					fmt.Printf("%v", err)
+					continue
+				}
+				err = res.body.Close()
+				if err != nil {
+					fmt.Printf("%v", err)
+					continue
+				}
+				save, err := c.store.CheckAndSave(ctx, res.url, article.TextContent)
+				if err != nil {
+					fmt.Printf("%v", err)
+					continue
+				}
+				if save {
+					links := extension.UrlExtractor(article.Content)
+					extension.CheckSaveAddUrlToFrontier(ctx, c.frontier, c.store, links)
+				}
+			}
+		}()
+	}
+	<-ctx.Done()
 	return nil
 }
 
