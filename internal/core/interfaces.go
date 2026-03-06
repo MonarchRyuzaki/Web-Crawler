@@ -48,3 +48,12 @@ type Frontier interface {
 	// This blocks until a URL is ready.
 	NextUrl(ctx context.Context) (string, error)
 }
+
+// Metrics is the collector for different type of metrics
+type Metrics interface {
+	IncPagesCrawled()
+	IncCacheHits()
+	GetPagesCrawled() int64
+	GetCacheHits() int64
+	PrintMetrics()
+}

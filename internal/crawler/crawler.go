@@ -15,6 +15,7 @@ type Crawler struct {
 	fetcher  core.Fetcher
 	parser   core.Parser
 	store    core.Storage
+	metrics  core.Metrics
 }
 
 type fetchResult struct {
@@ -28,6 +29,17 @@ const NUMBER_OF_PROCESSING_WORKERS = 5
 func (c *Crawler) Start(ctx context.Context) error {
 	log.Printf("Function Crawler.Start\n")
 	workStream := make(chan fetchResult, 50)
+	go func(ctx context.Context, m core.Metrics) {
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Printf("Exiting Metrics Printer")
+				return
+			case <-time.After(5 * time.Second):
+				m.PrintMetrics()
+			}
+		}
+	}(ctx, c.metrics)
 	for i := 0; i < NUMBER_OF_FETCHER_WORKERS; i++ {
 		go func() {
 			for {
@@ -65,6 +77,7 @@ func (c *Crawler) Start(ctx context.Context) error {
 					continue
 				}
 				if save {
+					c.metrics.IncPagesCrawled()
 					links := extension.UrlExtractor(article.Content)
 					extension.CheckSaveAddUrlToFrontier(ctx, c.frontier, c.store, links)
 				}
@@ -75,11 +88,12 @@ func (c *Crawler) Start(ctx context.Context) error {
 	return nil
 }
 
-func NewCrawler(frontier core.Frontier, fetcher core.Fetcher, parser core.Parser, store core.Storage) *Crawler {
+func NewCrawler(frontier core.Frontier, fetcher core.Fetcher, parser core.Parser, store core.Storage, metrics core.Metrics) *Crawler {
 	return &Crawler{
 		frontier: frontier,
 		fetcher:  fetcher,
 		parser:   parser,
 		store:    store,
+		metrics:  metrics,
 	}
 }

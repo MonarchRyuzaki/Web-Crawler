@@ -3,7 +3,6 @@ package frontier
 import (
 	"WebCrawler/pkg/util"
 	"context"
-	"fmt"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -53,7 +52,7 @@ func (f *Frontier) prioritizer(url string) (int, error) {
 	result := <-future
 
 	if result.Error != nil {
-		fmt.Printf("Failed %s: %v\n", url, result.Error)
+		//fmt.Printf("Failed %s: %v\n", url, result.Error)
 		return NUMBER_OF_FRONT_QUEUE - 1, nil
 	} else {
 		//fmt.Printf("✅ Got Result! %s => Rank: %d (Score: %.2f)\n", result.Domain, result.Rank, result.Score)
