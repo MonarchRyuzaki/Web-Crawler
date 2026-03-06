@@ -1,0 +1,35 @@
+services:
+  # Local DynamoDB instance
+  dynamodb-local:
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ."
+    image: "amazon/dynamodb-local:latest"
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    volumes:
+      - "dynamodb_data:/home/dynamodblocal"
+    working_dir: /home/dynamodblocal
+
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin
+    container_name: dynamodb-admin
+    ports:
+      - "8001:8001"
+    environment:
+      - DYNAMO_ENDPOINT=http://dynamodb-local:8000
+    depends_on:
+      - dynamodb-local
+
+  # Local Redis instance
+  redis:
+    image: "redis:alpine"
+    container_name: redis-local
+    ports:
+      - "6379:6379"
+    volumes:
+      - "redis_data:/data"
+    restart: always
+
+volumes:
+  dynamodb_data:
+  redis_data:
