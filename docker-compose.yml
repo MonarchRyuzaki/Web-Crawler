@@ -22,7 +22,7 @@ services:
 
   # Local Redis instance
   redis:
-    image: "redis:alpine"
+    image: "redis/redis-stack-server:latest"
     container_name: redis-local
     ports:
       - "6379:6379"
