@@ -72,7 +72,7 @@ func NewFetcher(timeout time.Duration, userAgent string) *Fetcher {
 					if err != nil {
 						return nil, err
 					}
-					fmt.Printf("[DIAL] Attempting connection to %s using IPs %v\n", host, ips)
+					//fmt.Printf("[DIAL] Attempting connection to %s using IPs %v\n", host, ips)
 					for _, ip := range ips {
 						var dialer net.Dialer
 						conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
