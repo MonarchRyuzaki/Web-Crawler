@@ -54,7 +54,11 @@ func main() {
 	fr := frontier.NewFrontier()
 	f := fetcher.NewFetcher(10*time.Second, "ShiryuBot/1.0")
 	p := parser.NewParser()
-	i := storage.NewInMemoryStore()
+	//i := storage.NewInMemoryStore()
+	i, err := storage.NewDynamoStore(ctx, db, cache)
+	if err != nil {
+		log.Fatal(err)
+	}
 	m := metrics.NewMetricsCollector()
 	internal.SeedUrls(ctx, fr, i)
 
