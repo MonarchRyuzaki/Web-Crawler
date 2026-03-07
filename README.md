@@ -195,7 +195,7 @@ The link extractor (`internal/extension/link.go`) handles:
    go run main.go
    ```
 
-The crawler will start with the seed URL (`https://en.wikipedia.org/wiki/Web_crawler`) and crawl up to 10 pages before stopping. Press `Ctrl+C` for graceful shutdown.
+The crawler will start with the seed URL (`https://en.wikipedia.org/wiki/Web_crawler`). Press `Ctrl+C` for graceful shutdown.
 
 ## Configuration
 
