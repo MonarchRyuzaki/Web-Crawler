@@ -13,7 +13,8 @@ A concurrent, polite web crawler built in Go, featuring a multi-queue frontier w
 | **Frontier** | `core.Frontier` | URL scheduling with priority (front queues) and politeness (back queues) |
 | **Fetcher** | `core.Fetcher` | HTTP client with DNS caching, connection pooling, and robots.txt enforcement |
 | **Parser** | `core.Parser` | Extracts readable content and metadata from HTML using [go-readability](https://github.com/go-shiori/go-readability) |
-| **Storage** | `core.Storage` | Content deduplication via SHA-256 hashing and visited-URL tracking |
+| **Storage** | `core.Storage` | Two-tier URL deduplication (Redis Bloom Filter + DynamoDB) and content persistence with SHA-256 hashing |
+| **Metrics** | `core.Metrics` | Tracks crawl rate, pages crawled, and cache hit statistics |
 | **Crawler** | `core.Crawler` | Main orchestrator that ties all components together |
 
 ---
@@ -78,6 +79,26 @@ After downloading, page content must be checked for duplicates before storage. S
 
 The current implementation uses **SHA-256** for exact-match deduplication. Near-duplicate detection (SimHash) is deferred to a future iteration.
 
+### Persistent Storage (DynamoDB + Redis)
+
+The crawler uses a two-tier persistent storage architecture instead of in-memory maps:
+
+**DynamoDB** — Source of truth for crawled content. Each page is stored with its URL (partition key), content hash, title, excerpt, site name, language, byline, and crawl timestamp. Conditional writes (`attribute_not_exists`) prevent duplicate entries without read-before-write overhead.
+
+**Redis Bloom Filter** — Fast probabilistic check for the URL-seen test. Before crawling a URL, the Bloom Filter is queried first:
+- If it returns **false** → the URL is definitely new (skip the DB read entirely).
+- If it returns **true** → might be a false positive, so DynamoDB is checked as the ground truth.
+
+This saves the majority of DynamoDB reads since most discovered URLs are new. The Bloom Filter is configured with a 1% false positive rate and a capacity of 1,000,000 URLs.
+
+**Why this design?**
+| Layer | Role | Latency |
+|-------|------|---------|
+| Redis Bloom Filter | Fast "definitely not seen" gate | ~1ms |
+| DynamoDB | Ground truth for positives + content storage | ~5-10ms |
+
+Both services run locally via Docker Compose for development, with the option to point at real AWS services for production.
+
 ### Content Parsing
 
 Raw HTML is not stored directly. The fetched page is passed through [go-readability](https://github.com/go-shiori/go-readability) to strip boilerplate (navbars, footers, ads) and extract the actual readable content before storage. It also handles **Relative → Absolute conversion** — e.g., `/wiki/Food` becomes `https://en.wikipedia.org/wiki/Food`
@@ -97,10 +118,16 @@ The link extractor (`internal/extension/link.go`) handles:
 ```
 .
 ├── main.go                     # Entry point
+├── docker-compose.yml          # Local DynamoDB, DynamoDB Admin UI, and Redis
+├── config/
+│   └── config.go               # Configuration (AWS region, DynamoDB/Redis endpoints)
+├── database/
+│   ├── dynamodb.go             # DynamoDB client singleton
+│   └── redis.go                # Redis client singleton
 ├── internal/
 │   ├── seeder.go               # Seeds initial URLs into the frontier
 │   ├── core/
-│   │   └── interfaces.go       # Core interfaces (Frontier, Fetcher, Parser, Storage)
+│   │   └── interfaces.go       # Core interfaces (Frontier, Fetcher, Parser, Storage, Metrics)
 │   ├── crawler/
 │   │   └── crawler.go          # Main crawl loop orchestrator
 │   ├── extension/
@@ -110,10 +137,13 @@ The link extractor (`internal/extension/link.go`) handles:
 │   │   └── fake-fetcher.go     # Mock fetcher for testing
 │   ├── frontier/
 │   │   └── frontier.go         # Priority + politeness queue system
+│   ├── metrics/
+│   │   └── metrics.go          # Crawl metrics collector (pages crawled, cache hits, crawl rate)
 │   ├── parser/
 │   │   └── parser.go           # HTML content parser
 │   ├── storage/
-│   │   └── InMemoryStore.go    # In-memory visited set and content store
+│   │   ├── InMemoryStore.go    # In-memory store (for testing)
+│   │   └── PersistantStore.go  # DynamoDB + Redis Bloom Filter store
 │   └── worker/
 │       └── worker.go           # Worker pool (experimental)
 └── pkg/
@@ -126,6 +156,7 @@ The link extractor (`internal/extension/link.go`) handles:
 ## Prerequisites
 
 - **Go 1.25+**
+- **Docker & Docker Compose** (for local DynamoDB and Redis)
 - An [OpenPageRank API key](https://www.domcop.com/openpagerank/) (free tier available)
 
 ## Setup
@@ -139,14 +170,27 @@ The link extractor (`internal/extension/link.go`) handles:
 2. **Create a `.env` file** in the project root:
    ```env
    OPEN_PAGE_RANK_API_KEY=your_api_key_here
+   AWS_REGION=us-east-1
+   DYNAMO_ENDPOINT=http://localhost:8000
+   REDIS_ADDR=localhost:6379
+   REDIS_PASS=
    ```
 
-3. **Install dependencies:**
+3. **Start the infrastructure:**
+   ```bash
+   docker compose up -d
+   ```
+   This spins up:
+   - **DynamoDB Local** on port `8000`
+   - **DynamoDB Admin UI** on port `8001` (browse your tables at `http://localhost:8001`)
+   - **Redis Stack** on port `6379` (with Bloom Filter module)
+
+4. **Install dependencies:**
    ```bash
    go mod download
    ```
 
-4. **Run the crawler:**
+5. **Run the crawler:**
    ```bash
    go run main.go
    ```
@@ -155,7 +199,7 @@ The crawler will start with the seed URL (`https://en.wikipedia.org/wiki/Web_cra
 
 ## Configuration
 
-Key parameters can be adjusted in the source:
+Key parameters can be adjusted in the source or via environment variables:
 
 | Parameter | Location | Default | Description |
 |-----------|----------|---------|-------------|
@@ -165,6 +209,11 @@ Key parameters can be adjusted in the source:
 | User-Agent | `main.go` | `ShiryuBot/1.0` | Crawler identification |
 | Front queues | `internal/frontier/frontier.go` | 5 | Number of priority queues |
 | Back queues | `internal/frontier/frontier.go` | 5 | Number of politeness queues |
+| AWS Region | `.env` / `config/config.go` | `us-east-1` | AWS region for DynamoDB |
+| DynamoDB Endpoint | `.env` / `config/config.go` | `http://localhost:8000` | DynamoDB endpoint (local or AWS) |
+| Redis Address | `.env` / `config/config.go` | `localhost:6379` | Redis connection address |
+| Bloom Filter FP Rate | `internal/storage/PersistantStore.go` | 1% | Bloom filter false positive rate |
+| Bloom Filter Capacity | `internal/storage/PersistantStore.go` | 1,000,000 | Max URLs the Bloom filter expects |
 
 ## Dependencies
 
@@ -172,16 +221,17 @@ Key parameters can be adjusted in the source:
 - [dnscache](https://github.com/rs/dnscache) — DNS response caching
 - [godotenv](https://github.com/joho/godotenv) — Environment variable loading from `.env`
 - [golang.org/x/net/html](https://pkg.go.dev/golang.org/x/net/html) — HTML tokenizer and parser
+- [aws-sdk-go-v2](https://github.com/aws/aws-sdk-go-v2) — AWS SDK for DynamoDB
+- [go-redis](https://github.com/redis/go-redis) — Redis client with Bloom Filter command support
 
 ## Future Additions
 
 - **Crawl Delay** — Respect `Crawl-delay` directives from `robots.txt` and introduce configurable per-host delays between requests to improve politeness and reduce the risk of being blocked.
-- **Cloud-Native Storage** — Replace `MemoryStore` with DynamoDB for persistence and `MemoryQueue` with Redis (`RPUSH`/`LPOP`) for distributed queuing. Containerize with Docker to spin up multiple worker instances sharing the same Redis frontier.
-- **Bloom Filter + DynamoDB for URL-Seen** — Two-tier URL deduplication: a Bloom filter in RAM as a fast first pass (if "no" → guaranteed new, skip DB read), with DynamoDB as the source of truth for false positives. This saves ~90% of DB reads since most discovered URLs are new.
+- **Distributed Queuing** — Replace in-memory `MemoryQueue` with Redis (`RPUSH`/`LPOP`) for distributed queuing. Containerize with Docker to spin up multiple worker instances sharing the same Redis frontier.
 - **Near-Duplicate Detection (SimHash)** — Move beyond exact-match SHA-256 to SimHash fingerprinting for detecting pages with near-identical content.
 - **Sitemap Parsing** — Parse `sitemap.xml` from `robots.txt` to bulk-discover URLs in a single request instead of one-by-one link following, improving coverage of deep/orphan pages.
 - **Smart Parameter Stripping** — Automatically detect and strip useless query parameters (session IDs, tracking params like `utm_source`) using heuristics: if the same URL path with different param values produces identical content hashes, flag that parameter as noise for the domain.
-- **Metrics & Observability** — Real-time dashboard with crawl rate, queue depth, error counts, and per-domain statistics.
+- **Metrics & Observability** — Expand the current metrics collector into a real-time dashboard with queue depth, error counts, and per-domain statistics.
 - **Edge Case Hardening** — Handle redirects (301/302), enforce `MaxBodySize` limits to skip oversized pages, and add retry logic with exponential backoff.
 
 ## Design Decisions & Trade-offs
@@ -190,8 +240,9 @@ Key parameters can be adjusted in the source:
 |----------|-----------|
 | **SHA-256 over SimHash** | SimHash is better for near-duplicates but requires comparing against all existing hashes (needs indexing). SHA-256 is a simple map lookup for exact matches — good enough for v1. |
 | **URL-seen check before crawl** | If page X links to A and page Y also links to A, checking *after* fetch would waste a fetch. Checking *before* enqueuing avoids duplicate work. |
-| **In-memory over DynamoDB** | Faster iteration during development. The interface-driven design means swapping to DynamoDB later requires zero changes to the crawler logic. |
-| **Bloom filter consideration** | For large-scale crawls, a Bloom filter in front of the DB saves ~90% of read operations since most URLs are new. Deferred until the cloud-native phase. |
+| **DynamoDB + Redis Bloom Filter** | Two-tier deduplication: Bloom filter in Redis as a fast first pass (if "no" → guaranteed new, skip DB read), with DynamoDB as the source of truth for false positives. This saves ~90% of DB reads since most discovered URLs are new. |
+| **Conditional writes in DynamoDB** | Using `attribute_not_exists` condition on PutItem avoids read-before-write for content storage, letting DynamoDB handle the uniqueness check atomically. |
+| **Docker Compose for local dev** | DynamoDB Local and Redis Stack run in containers for zero-cost local development, with the same code pointing at real AWS services in production. |
 | **No sitemap parsing** | Standard link-following provides enough URLs for the current scope. Sitemap parsing is an optimization for *coverage*, not *correctness*. |
 
 ## License
