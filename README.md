@@ -215,6 +215,12 @@ Key parameters can be adjusted in the source or via environment variables:
 | Bloom Filter FP Rate | `internal/storage/PersistantStore.go` | 1% | Bloom filter false positive rate |
 | Bloom Filter Capacity | `internal/storage/PersistantStore.go` | 1,000,000 | Max URLs the Bloom filter expects |
 
+## Performance
+
+On a single instance, the crawler sustains approximately **~4 fresh pages/second** (unique pages saved, excluding duplicates). This accounts for the full pipeline per page: DNS lookup, robots.txt check, HTTP fetch, content extraction, SHA-256 hashing, Redis Bloom Filter query, and DynamoDB conditional write.
+
+For a single-process, polite crawler this is a reasonable baseline — production-scale systems achieve higher throughput through horizontal scaling (distributed workers sharing a common frontier), not by being faster per-instance.
+
 ## Dependencies
 
 - [go-readability](https://github.com/go-shiori/go-readability) — Content extraction from HTML
