@@ -71,7 +71,7 @@ func (c *Crawler) Start(ctx context.Context) error {
 					fmt.Printf("%v", err)
 					continue
 				}
-				save, err := c.store.CheckAndSave(ctx, res.url, article.TextContent)
+				save, err := c.store.CheckAndSave(ctx, res.url, article)
 				if err != nil {
 					fmt.Printf("%v", err)
 					continue
