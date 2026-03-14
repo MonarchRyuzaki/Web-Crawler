@@ -62,7 +62,7 @@ func main() {
 	m := metrics.NewMetricsCollector()
 	internal.SeedUrls(ctx, fr, i)
 
-	c := crawler.NewCrawler(fr, f, p, i, m)
+	c := crawler.NewCrawler(fr, f, p, i, m, cache)
 	err = c.Start(ctx)
 	if err != nil {
 		log.Fatal(err)

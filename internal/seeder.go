@@ -7,6 +7,6 @@ import (
 )
 
 func SeedUrls(ctx context.Context, frontier core.Frontier, store core.Storage) {
-	links := []string{"https://en.wikipedia.org/wiki/Web_crawler"}
+	links := []string{"https://en.wikipedia.org/wiki/Dog"}
 	extension.CheckSaveAddUrlToFrontier(ctx, frontier, store, links)
 }

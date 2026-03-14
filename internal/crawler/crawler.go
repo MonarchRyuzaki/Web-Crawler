@@ -3,11 +3,14 @@ package crawler
 import (
 	"WebCrawler/internal/core"
 	"WebCrawler/internal/extension"
+	"WebCrawler/internal/publisher"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type Crawler struct {
@@ -16,6 +19,7 @@ type Crawler struct {
 	parser   core.Parser
 	store    core.Storage
 	metrics  core.Metrics
+	cache    *redis.Client
 }
 
 type fetchResult struct {
@@ -79,6 +83,7 @@ func (c *Crawler) Start(ctx context.Context) error {
 				if save {
 					c.metrics.IncPagesCrawled()
 					links := extension.UrlExtractor(article.Content)
+					publisher.Publish(ctx, c.cache, res.url, article)
 					extension.CheckSaveAddUrlToFrontier(ctx, c.frontier, c.store, links)
 				}
 			}
@@ -88,12 +93,13 @@ func (c *Crawler) Start(ctx context.Context) error {
 	return nil
 }
 
-func NewCrawler(frontier core.Frontier, fetcher core.Fetcher, parser core.Parser, store core.Storage, metrics core.Metrics) *Crawler {
+func NewCrawler(frontier core.Frontier, fetcher core.Fetcher, parser core.Parser, store core.Storage, metrics core.Metrics, cache *redis.Client) *Crawler {
 	return &Crawler{
 		frontier: frontier,
 		fetcher:  fetcher,
 		parser:   parser,
 		store:    store,
 		metrics:  metrics,
+		cache:    cache,
 	}
 }
