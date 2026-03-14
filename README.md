@@ -103,6 +103,37 @@ Both services run locally via Docker Compose for development, with the option to
 
 Raw HTML is not stored directly. The fetched page is passed through [go-readability](https://github.com/go-shiori/go-readability) to strip boilerplate (navbars, footers, ads) and extract the actual readable content before storage. It also handles **Relative → Absolute conversion** — e.g., `/wiki/Food` becomes `https://en.wikipedia.org/wiki/Food`
 
+### Publishing & Search Enablement
+
+After content is successfully saved to DynamoDB, the crawler publishes an `ArticleMessage` to a Redis queue (`queue:articles`). This enables downstream modules to build search capabilities without coupling them to the main crawler.
+
+**Published Message Structure:**
+```json
+{
+  "url": "https://example.com/page",
+  "content_hash": "abc123...",
+  "title": "Page Title",
+  "content": "Full readable text...",
+  "excerpt": "Short summary...",
+  "site_name": "Example Site",
+  "byline": "Author Name",
+  "crawled_at": "2026-03-14T10:30:00Z",
+  "language": "en"
+}
+```
+
+**Why separate publishing from crawling?**
+
+- **Decoupling** — The crawler and search indexer are independent services. Indexing failures don't block the crawler.
+- **Scalability** — Multiple indexer instances can consume from the same Redis queue, enabling horizontal scaling of the search pipeline.
+- **Flexibility** — Other modules (analytics, recommendation engines, etc.) can subscribe to the same queue without modifying the crawler.
+
+The publisher runs asynchronously after successful content storage, ensuring minimal impact on crawler throughput.
+
+**Search Pipeline Implementation:**
+
+See [crawler-search-pipeline](https://github.com/MonarchRyuzaki/crawler-search-pipeline) for the search indexer that consumes these messages from the Redis queue and enables BM25 + kNN search on crawled documents.
+
 ### URL Filtering & Link Extraction
 
 The link extractor (`internal/extension/link.go`) handles:
@@ -141,6 +172,8 @@ The link extractor (`internal/extension/link.go`) handles:
 │   │   └── metrics.go          # Crawl metrics collector (pages crawled, cache hits, crawl rate)
 │   ├── parser/
 │   │   └── parser.go           # HTML content parser
+│   ├── publisher/
+│   │   └── publisher.go        # Publishes crawled articles to Redis queue for search indexing
 │   ├── storage/
 │   │   ├── InMemoryStore.go    # In-memory store (for testing)
 │   │   └── PersistantStore.go  # DynamoDB + Redis Bloom Filter store
